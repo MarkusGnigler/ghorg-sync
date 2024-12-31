@@ -1,0 +1,11 @@
+---
+services:
+  gl-backup:
+    restart: unless-stopped
+    image: ghcr.io/markusgnigler/ghorg-sync:latest
+    environment:
+      TZ: Europe/Vienna
+      CRON_SCHEDULE: "* * * * *"
+    volumes:
+      - ./config/ghorg:/root/.config/ghorg
+      - ./config/rclone:/root/.config/rclone

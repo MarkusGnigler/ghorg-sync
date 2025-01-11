@@ -1,19 +1,15 @@
 #!/bin/sh
 
-GREEN='\033[0;32m'
 RESET='\033[0m'
-log() {
-    local text=$1
-
-    echo -e "${GREEN}${text}${RESET}"
-}
 function color() {
+    local stamp=$(date "+%Y-%m-%d %H:%M:%S")
+    local text="[$stamp] $2"
     case $1 in
-        red)     echo -e "\033[31m$2\033[0m" ;;
-        green)   echo -e "\033[32m$2\033[0m" ;;
-        yellow)  echo -e "\033[33m$2\033[0m" ;;
-        blue)    echo -e "\033[34m$2\033[0m" ;;
-        none)    echo "$2" ;;
+        red)     echo -e "\033[31m${text}${RESET}" ;;
+        green)   echo -e "\033[32m${text}${RESET}" ;;
+        yellow)  echo -e "\033[33m${text}${RESET}" ;;
+        blue)    echo -e "\033[34m${text}${RESET}" ;;
+        none)    echo "$text" ;;
     esac
 }
 
@@ -22,7 +18,15 @@ function color() {
 # ghorg
 
 gsync() {
-    ghorg clone all-groups --preserve-dir --path=$DATA_PATH > /dev/null
+    color blue "Starting gitlab sync"
+
+    output=$(ghorg clone all-groups --preserve-dir --path=$DATA_PATH 2>&1)
+
+    if [[ $? != 0 ]]; then
+        color red "ghorg failed:"
+        echo red $output
+        exit 1
+    fi
 }
 
 # compressions
@@ -30,7 +34,6 @@ gsync() {
 zipit() {
     local source_dircetory=$1
     
-
     zip -q -r $source_dircetory $DATA_PATH
 }
 
@@ -41,6 +44,10 @@ tarit() {
 }
 
 # rclone
+# rclone remote derectory
+REMOTE_DIR=${REMOTE_DIR:-remote:GitRepoBackup}
+# Minimum age for cleanup (e.g., 7 days)
+MIN_AGE=${MIN_AGE:-7d}  
 
 rclone_setup() {
     rclone config
@@ -49,7 +56,24 @@ rclone_setup() {
 rclone_sync() {
     local source_dircetory=$1
 
-    rclone sync $source_dircetory remote:GitRepoBackup
+    color blue "Starting remote sync"
+
+    rclone copy $source_dircetory $REMOTE_DIR
+    if [[ $? != 0 ]]; then
+        color red "Upload failed: $?"
+    fi
+}
+
+rclone_cleanup() {
+    color blue "Cleanup remote"
+
+    rclone lsf --min-age $MIN_AGE $REMOTE_DIR | \
+    while read -r file; do
+        rclone delete "$REMOTE_DIR/$file"
+    done
+    if [[ $? != 0 ]]; then
+        color red "Cleanup failed: $?"
+    fi
 }
 
 # cleanup
@@ -57,16 +81,17 @@ rclone_sync() {
 cleanup() {
     local source_dircetory=$1
 
+    color blue "Cleanup data folder"
+
     rm -rf $source_dircetory/*
 }
 
 # --- run it ---
 
 main() {
-    log "Starting gitlab sync"
     gsync
 
-    log "Starting compression"
+    color blue "Starting compression"
     TIMESTAMP=$(date +%Y%m%d%H%M%S)
     case "$COMPRESSION" in
         zip)
@@ -80,18 +105,18 @@ main() {
             tarit $DIRECTORY_PATH
             ;;
         *)
-            echo "ERROR: Unsupported compression type. Use 'zip' or 'tar'."
+            color red "ERROR: Unsupported compression type. Use 'zip' or 'tar'."
             exit 1
             ;;
     esac
 
-    log "Starting remote sync"
     rclone_sync $DIRECTORY_PATH
 
-    log "Cleanup data folder"
+    rclone_cleanup
+
     cleanup $DATA_PATH
 
-    log "Finished"
+    color green "Finished"
     echo ""
 }
 

@@ -37,6 +37,8 @@ RUN chmod +x /app/*.sh
 
 ENV \
     DATA_PATH=/data \
-    COMPRESSION=zip
+    COMPRESSION=zip \
+    REMOTE_DIR=remote:GitRepoBackup \
+    MIN_AGE=7d
     
 ENTRYPOINT [ "sh", "./entrypoint.sh" ]
